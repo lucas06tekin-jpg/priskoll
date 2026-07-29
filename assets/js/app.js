@@ -875,9 +875,9 @@
   });
   $("#btnResetHistory").addEventListener("click", function(){
     if (!state.supplier) return;
-    if (confirm("Radera all sparad historik (jämförelser och arkiverade listor) för " + state.supplier + "? Går inte att ångra.")){
+    if (confirm("Radera hela arkivet (alla sparade listor och jämförelser) för " + state.supplier + "? Går inte att ångra.")){
       clearHistory(slugify(state.supplier));
-      alert("Klart. Historiken för " + state.supplier + " är raderad.");
+      alert("Klart. Arkivet för " + state.supplier + " är raderat.");
     }
   });
   activeSupplierName.addEventListener("click", function(){
@@ -909,7 +909,7 @@
     footnoteInfo.textContent = previousCompareText();
   }
 
-  /* ---------- Historik ---------- */
+  /* ---------- Arkiv ---------- */
   var historySupplierSelect = $("#historySupplierSelect");
   var historyList = $("#historyList");
   var historyDetail = $("#historyDetail");
@@ -931,7 +931,7 @@
     var suppliers = getKnownSuppliers();
     if (!suppliers.length){
       historySupplierSelect.innerHTML = "";
-      historyList.innerHTML = '<div class="empty-state">Ingen historik sparad än.</div>';
+      historyList.innerHTML = '<div class="empty-state">Inget sparat i arkivet än.</div>';
       historyDetail.innerHTML = '<div class="empty-state">Ladda upp en lista först.</div>';
       showScreen("history");
       return;
@@ -950,7 +950,7 @@
     var history = loadHistory(slug);
 
     if (!history.length){
-      historyList.innerHTML = '<div class="empty-state">Ingen historik sparad för ' + escapeHtml(supplierName) + ' än.</div>';
+      historyList.innerHTML = '<div class="empty-state">Inget sparat i arkivet för ' + escapeHtml(supplierName) + ' än.</div>';
       historyDetail.innerHTML = '<div class="empty-state">Välj ett datum till vänster för att se listan som den såg ut då.</div>';
       return;
     }
