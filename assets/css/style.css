@@ -122,6 +122,10 @@ button{ font-family: inherit; }
   margin-top: 2px;
 }
 
+.header-actions{
+  display:flex; align-items:center; gap:10px;
+  flex-wrap: wrap;
+}
 .supplier-switch{
   display:flex; align-items:center; gap:10px;
   font-size:.85rem;

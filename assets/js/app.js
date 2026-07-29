@@ -220,7 +220,7 @@
     screenMapping.hidden = name !== "mapping";
     screenDashboard.hidden = name !== "dashboard";
     screenHistory.hidden = name !== "history";
-    supplierSwitch.hidden = name === "upload";
+    supplierSwitch.hidden = state.headers.length === 0;
   }
 
   /* ---------- Upload screen wiring ---------- */
@@ -1016,7 +1016,9 @@
     renderHistoryList(historySupplierSelect.value);
   });
   $("#btnHistory").addEventListener("click", openHistoryScreen);
-  $("#btnCloseHistory").addEventListener("click", function(){ showScreen("dashboard"); });
+  $("#btnCloseHistory").addEventListener("click", function(){
+    showScreen(state.headers.length ? "dashboard" : "upload");
+  });
 
   showScreen("upload");
 })();
