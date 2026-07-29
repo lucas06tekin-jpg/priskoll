@@ -2,7 +2,7 @@
    PRISKOLL — allt körs lokalt i webbläsaren.
    Data lagras i localStorage per leverantör (ingen server, ingen databas).
    Vill man senare byta till inloggning + molnlagring: byt bara ut
-   loadSnapshot()/saveSnapshot()/loadMapping()/saveMapping() mot API-anrop.
+   loadHistory()/appendHistory()/loadMapping()/saveMapping() mot API-anrop.
    ============================================================ */
 (function(){
   "use strict";
@@ -50,6 +50,7 @@
     mapping: {},        // field -> header index
     items: [],          // parsed + diffed items
     removed: [],
+    lastFileName: "",
     sort: { key: "diffPct", dir: "desc" }
   };
 
@@ -117,7 +118,7 @@
 
   /* ---------- localStorage (per leverantör) ---------- */
   function suppliersListKey(){ return "pk_suppliers"; }
-  function snapshotKey(slug){ return "pk_snapshot_" + slug; }
+  function historyKey(slug){ return "pk_history_" + slug; }
   function mappingKey(slug){ return "pk_mapping_" + slug; }
 
   function getKnownSuppliers(){
@@ -131,17 +132,20 @@
       localStorage.setItem(suppliersListKey(), JSON.stringify(list));
     }
   }
-  function loadSnapshot(slug){
+  function loadHistory(slug){
     try {
-      var raw = localStorage.getItem(snapshotKey(slug));
-      return raw ? JSON.parse(raw) : null;
-    } catch(e){ return null; }
+      var raw = localStorage.getItem(historyKey(slug));
+      return raw ? JSON.parse(raw) : [];
+    } catch(e){ return []; }
   }
-  function saveSnapshot(slug, items){
-    localStorage.setItem(snapshotKey(slug), JSON.stringify({ items: items, savedAt: new Date().toISOString() }));
+  function appendHistory(slug, items, fileName){
+    var history = loadHistory(slug);
+    history.push({ savedAt: new Date().toISOString(), fileName: fileName || "", items: items });
+    localStorage.setItem(historyKey(slug), JSON.stringify(history));
+    return history;
   }
-  function clearSnapshot(slug){
-    localStorage.removeItem(snapshotKey(slug));
+  function clearHistory(slug){
+    localStorage.removeItem(historyKey(slug));
   }
   function loadMapping(slug){
     try {
@@ -207,6 +211,7 @@
   var screenUpload = $("#screenUpload");
   var screenMapping = $("#screenMapping");
   var screenDashboard = $("#screenDashboard");
+  var screenHistory = $("#screenHistory");
   var supplierSwitch = $("#supplierSwitch");
   var activeSupplierName = $("#activeSupplierName");
 
@@ -214,6 +219,7 @@
     screenUpload.hidden = name !== "upload";
     screenMapping.hidden = name !== "mapping";
     screenDashboard.hidden = name !== "dashboard";
+    screenHistory.hidden = name !== "history";
     supplierSwitch.hidden = name === "upload";
   }
 
@@ -305,6 +311,7 @@
     clearUploadError();
     var supplier = supplierInput.value.trim() || deriveSupplierFromFilename(file.name);
     supplierInput.value = supplier;
+    state.lastFileName = file.name;
     var isCsv = /\.csv$/i.test(file.name);
     var isPdf = /\.pdf$/i.test(file.name);
     var reader = new FileReader();
@@ -688,13 +695,14 @@
     }).filter(Boolean);
 
     var slug = slugify(state.supplier);
-    var previousSnapshot = loadSnapshot(slug);
-    var diff = computeDiff(current, previousSnapshot ? previousSnapshot.items : null);
+    var history = loadHistory(slug);
+    var previous = history.length ? history[history.length - 1] : null;
+    var diff = computeDiff(current, previous ? previous.items : null);
 
     state.items = diff.items;
     state.removed = diff.removed;
 
-    saveSnapshot(slug, current);
+    appendHistory(slug, current, state.lastFileName);
 
     populateCategoryFilter();
     renderKPIs();
@@ -867,9 +875,9 @@
   });
   $("#btnResetHistory").addEventListener("click", function(){
     if (!state.supplier) return;
-    if (confirm("Nollställ jämförelsehistorik för " + state.supplier + "? Nästa uppladdning blir en ny jämförelsebas.")){
-      clearSnapshot(slugify(state.supplier));
-      alert("Klart. Historiken för " + state.supplier + " är nollställd.");
+    if (confirm("Radera all sparad historik (jämförelser och arkiverade listor) för " + state.supplier + "? Går inte att ångra.")){
+      clearHistory(slugify(state.supplier));
+      alert("Klart. Historiken för " + state.supplier + " är raderad.");
     }
   });
   activeSupplierName.addEventListener("click", function(){
@@ -885,8 +893,8 @@
     var oldSlug = slugify(oldName);
     var newSlug = slugify(newName);
     if (oldSlug !== newSlug){
-      var snap = localStorage.getItem(snapshotKey(oldSlug));
-      if (snap){ localStorage.setItem(snapshotKey(newSlug), snap); localStorage.removeItem(snapshotKey(oldSlug)); }
+      var hist = localStorage.getItem(historyKey(oldSlug));
+      if (hist){ localStorage.setItem(historyKey(newSlug), hist); localStorage.removeItem(historyKey(oldSlug)); }
       var map = localStorage.getItem(mappingKey(oldSlug));
       if (map){ localStorage.setItem(mappingKey(newSlug), map); localStorage.removeItem(mappingKey(oldSlug)); }
     }
@@ -900,6 +908,115 @@
     refreshSupplierDatalist();
     footnoteInfo.textContent = previousCompareText();
   }
+
+  /* ---------- Historik ---------- */
+  var historySupplierSelect = $("#historySupplierSelect");
+  var historyList = $("#historyList");
+  var historyDetail = $("#historyDetail");
+
+  function formatHistoryDate(iso){
+    var d = new Date(iso);
+    var datePart = d.toLocaleDateString("sv-SE", { day: "numeric", month: "long", year: "numeric" });
+    var timePart = d.toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" });
+    return datePart + ", " + timePart;
+  }
+
+  function historyEntryValue(entry){
+    return entry.items.reduce(function(sum, i){
+      return sum + (i.pris !== null && i.pris !== undefined ? i.pris * (i.antal || 1) : 0);
+    }, 0);
+  }
+
+  function openHistoryScreen(){
+    var suppliers = getKnownSuppliers();
+    if (!suppliers.length){
+      historySupplierSelect.innerHTML = "";
+      historyList.innerHTML = '<div class="empty-state">Ingen historik sparad än.</div>';
+      historyDetail.innerHTML = '<div class="empty-state">Ladda upp en lista först.</div>';
+      showScreen("history");
+      return;
+    }
+    historySupplierSelect.innerHTML = suppliers.map(function(s){
+      return '<option value="' + escapeHtml(s) + '">' + escapeHtml(s) + '</option>';
+    }).join("");
+    var chosen = suppliers.indexOf(state.supplier) !== -1 ? state.supplier : suppliers[0];
+    historySupplierSelect.value = chosen;
+    renderHistoryList(chosen);
+    showScreen("history");
+  }
+
+  function renderHistoryList(supplierName){
+    var slug = slugify(supplierName);
+    var history = loadHistory(slug);
+
+    if (!history.length){
+      historyList.innerHTML = '<div class="empty-state">Ingen historik sparad för ' + escapeHtml(supplierName) + ' än.</div>';
+      historyDetail.innerHTML = '<div class="empty-state">Välj ett datum till vänster för att se listan som den såg ut då.</div>';
+      return;
+    }
+
+    var order = [];
+    for (var i = history.length - 1; i >= 0; i--) order.push(i);
+
+    historyList.innerHTML = order.map(function(idx, pos){
+      var entry = history[idx];
+      var value = historyEntryValue(entry).toLocaleString("sv-SE", { maximumFractionDigits: 0 });
+      return (
+        '<button class="history-list-item' + (pos === 0 ? " is-active" : "") + '" data-idx="' + idx + '" type="button">' +
+          '<div class="date">' + formatHistoryDate(entry.savedAt) + '</div>' +
+          '<div class="meta">' + entry.items.length + ' artiklar · ' + value + ' kr' +
+            (entry.fileName ? ' · ' + escapeHtml(entry.fileName) : "") +
+          '</div>' +
+        '</button>'
+      );
+    }).join("");
+
+    $all(".history-list-item", historyList).forEach(function(btn){
+      btn.addEventListener("click", function(){
+        $all(".history-list-item", historyList).forEach(function(b){ b.classList.remove("is-active"); });
+        this.classList.add("is-active");
+        renderHistoryDetail(history, parseInt(this.getAttribute("data-idx"), 10));
+      });
+    });
+
+    renderHistoryDetail(history, history.length - 1);
+  }
+
+  function renderHistoryDetail(history, idx){
+    var entry = history[idx];
+    var previous = idx > 0 ? history[idx - 1] : null;
+    var diff = computeDiff(entry.items, previous ? previous.items : null);
+    var rows = diff.items.concat(diff.removed).sort(function(a, b){
+      return a.namn.localeCompare(b.namn, "sv");
+    });
+    var value = historyEntryValue(entry).toLocaleString("sv-SE", { maximumFractionDigits: 0 });
+
+    historyDetail.innerHTML = (
+      '<h3>' + formatHistoryDate(entry.savedAt) + '</h3>' +
+      '<p class="history-detail-meta">' + entry.items.length + ' artiklar · ' + value + ' kr' +
+        (entry.fileName ? ' · ' + escapeHtml(entry.fileName) : "") +
+        (previous ? "" : " · Första sparade listan för denna leverantör") +
+      '</p>' +
+      '<table><thead><tr><th>Namn</th><th>Kategori</th><th>Pris</th><th>Ändring</th></tr></thead><tbody>' +
+      rows.map(function(item){
+        return (
+          '<tr' + (item.status === "removed" ? ' style="opacity:.55"' : "") + '>' +
+            '<td>' + escapeHtml(item.namn) + '</td>' +
+            '<td>' + escapeHtml(item.kategori || "—") + '</td>' +
+            '<td class="col-pris">' + formatPris(item.pris) + '</td>' +
+            '<td>' + statusStamp(item) + '</td>' +
+          '</tr>'
+        );
+      }).join("") +
+      '</tbody></table>'
+    );
+  }
+
+  historySupplierSelect.addEventListener("change", function(){
+    renderHistoryList(historySupplierSelect.value);
+  });
+  $("#btnHistory").addEventListener("click", openHistoryScreen);
+  $("#btnCloseHistory").addEventListener("click", function(){ showScreen("dashboard"); });
 
   showScreen("upload");
 })();

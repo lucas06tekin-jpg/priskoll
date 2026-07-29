@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800;900&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/css/style.css?v=2">
+<link rel="stylesheet" href="assets/css/style.css?v=3">
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
 </head>
@@ -25,6 +25,7 @@
       <button class="supplier-name-btn" id="activeSupplierName" type="button" title="Klicka för att döpa om leverantören">—</button>
       <span class="sep">·</span>
       <button class="btn btn--ghost btn--sm" id="btnNewUpload" type="button">Ladda upp ny lista</button>
+      <button class="btn btn--ghost btn--sm no-print" id="btnHistory" type="button">Historik</button>
       <button class="btn btn--ghost btn--sm no-print" id="btnPrint" type="button">Skriv ut</button>
     </div>
   </div>
@@ -157,8 +158,35 @@
     </div>
   </section>
 
+  <!-- ============ SCREEN 4: HISTORIK ============ -->
+  <section class="history-screen" id="screenHistory" hidden>
+    <div class="container">
+      <div class="history-head">
+        <div>
+          <h2>Historik</h2>
+          <p class="lede">Alla tidigare uppladdade listor, sparade i den här webbläsaren.</p>
+        </div>
+        <div class="field history-supplier-field">
+          <label for="historySupplierSelect">Leverantör</label>
+          <select id="historySupplierSelect"></select>
+        </div>
+      </div>
+
+      <div class="history-body">
+        <div class="history-list" id="historyList"></div>
+        <div class="history-detail" id="historyDetail">
+          <div class="empty-state">Välj ett datum till vänster för att se listan som den såg ut då.</div>
+        </div>
+      </div>
+
+      <div class="mapping-actions">
+        <button class="btn btn--ghost" id="btnCloseHistory" type="button">Tillbaka</button>
+      </div>
+    </div>
+  </section>
+
 </main>
 
-<script src="assets/js/app.js?v=2"></script>
+<script src="assets/js/app.js?v=3"></script>
 </body>
 </html>
