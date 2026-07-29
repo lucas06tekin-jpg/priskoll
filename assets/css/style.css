@@ -198,6 +198,8 @@ button{ font-family: inherit; }
 .masthead .btn{ color: var(--paper); border-color: var(--ink-line); }
 .masthead .btn--ghost{ color: var(--paper-dim); }
 .masthead .btn--ghost:hover{ color: var(--paper); border-color: var(--ink-line); }
+.masthead .btn--brass{ color: #1a1108; border-color: var(--brass); }
+.masthead .btn--brass:hover{ border-color: var(--brass-bright); }
 
 /* ============================================================
    Upload screen
