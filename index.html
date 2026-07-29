@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PRISKOLL — Förenkla prislistor och leveranser</title>
+<meta name="description" content="Ladda upp Excel-prislistor och leveranssedlar. PRISKOLL städar upp listan, jämför mot förra leveransen och visar vad som ändrats.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800;900&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/style.css">
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+</head>
+<body>
+
+<header class="masthead">
+  <div class="container">
+    <a href="index.html" class="brandmark">
+      <span class="dot" aria-hidden="true"></span>
+      <span>PRISKOLL<small>Prislistor &amp; leveranser, utan strul</small></span>
+    </a>
+    <div class="supplier-switch" id="supplierSwitch" hidden>
+      <span>Leverantör:</span>
+      <strong id="activeSupplierName">—</strong>
+      <span class="sep">·</span>
+      <button class="btn btn--ghost btn--sm" id="btnNewUpload" type="button">Ladda upp ny lista</button>
+      <button class="btn btn--ghost btn--sm no-print" id="btnPrint" type="button">Skriv ut</button>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+
+  <!-- ============ SCREEN 1: UPLOAD ============ -->
+  <section class="upload-screen" id="screenUpload">
+    <div class="container upload-screen__grid">
+      <div class="upload-card reveal">
+        <h1>Klistra in kaoset.<br>Få ut en lista.</h1>
+        <p class="lede">Ladda upp Excel- eller PDF-filen du fick av leverantören. PRISKOLL städar upp den, jämför mot förra leveransen och visar vad som faktiskt har hänt med priserna.</p>
+
+        <div class="field">
+          <label for="supplierInput">Leverantör</label>
+          <input type="text" id="supplierInput" list="supplierList" placeholder="t.ex. Menigo, Martin &amp; Servera, Galatea…" autocomplete="off">
+          <datalist id="supplierList"></datalist>
+        </div>
+
+        <div class="field">
+          <label>Prislista</label>
+          <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Ladda upp fil">
+            <span class="dz-icon" aria-hidden="true">⇪</span>
+            <div class="dz-main">Släpp filen här, eller klicka för att välja</div>
+            <div class="dz-sub">.xlsx, .xls, .csv eller .pdf</div>
+            <input type="file" id="fileInput" accept=".xlsx,.xls,.csv,.pdf">
+          </div>
+        </div>
+
+        <div class="error-box" id="uploadError" hidden></div>
+
+        <p class="privacy-note">
+          <span class="ic" aria-hidden="true">●</span>
+          <span>Allt sker i webbläsaren — filen skickas aldrig till någon server. Förra listan sparas lokalt på den här datorn så att nästa uppladdning kan jämföras mot den.</span>
+        </p>
+      </div>
+
+      <div class="upload-visual reveal" aria-hidden="true">
+        <div class="mini-receipt">
+          <div class="mini-receipt__head">
+            <span>MENIGO</span>
+            <span>14 JUL</span>
+          </div>
+          <div class="mini-receipt__row">
+            <span>Kycklingfilé</span>
+            <span class="stamp stamp--up">Höjt +11%</span>
+          </div>
+          <div class="mini-receipt__row">
+            <span>Rödvin Chianti</span>
+            <span class="stamp stamp--down">Sänkt −8%</span>
+          </div>
+          <div class="mini-receipt__row">
+            <span>Räkor 200g</span>
+            <span class="stamp stamp--new">Ny</span>
+          </div>
+          <div class="mini-receipt__row is-removed">
+            <span>Smör 500g</span>
+            <span class="stamp stamp--removed">Borttagen</span>
+          </div>
+          <div class="mini-receipt__row">
+            <span>Pasta Penne 1kg</span>
+            <span class="stamp stamp--none">Oförändrat</span>
+          </div>
+        </div>
+        <p class="upload-visual__caption">Så här blir listan efter uppladdning.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SCREEN 2: COLUMN MAPPING ============ -->
+  <section class="mapping-screen" id="screenMapping" hidden>
+    <div class="container">
+      <h2>Stämmer det här?</h2>
+      <p class="lede">PRISKOLL har gissat vilka kolumner som är vilka. Justera om något är fel — <span class="required-star">*</span> måste fyllas i.</p>
+
+      <div class="mapping-grid" id="mappingGrid"></div>
+
+      <div class="mapping-actions">
+        <button class="btn btn--brass" id="btnConfirmMapping" type="button">Visa listan</button>
+        <button class="btn btn--ghost" id="btnCancelMapping" type="button">Avbryt</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SCREEN 3: DASHBOARD ============ -->
+  <section class="dashboard" id="screenDashboard" hidden>
+    <div class="container">
+
+      <div class="kpi-row" id="kpiRow"></div>
+
+      <div class="toolbar no-print">
+        <input type="search" id="searchInput" placeholder="Sök artikel eller kategori…">
+        <select id="categoryFilter">
+          <option value="">Alla kategorier</option>
+        </select>
+        <select id="statusFilter">
+          <option value="">Visa allt</option>
+          <option value="changed">Bara ändrade</option>
+          <option value="new">Nya varor</option>
+          <option value="up">Prishöjningar</option>
+          <option value="down">Prissänkningar</option>
+          <option value="removed">Borttagna</option>
+        </select>
+      </div>
+
+      <div class="table-wrap">
+        <table class="pk-table" id="pkTable">
+          <thead>
+            <tr>
+              <th data-sort="namn">Namn <span class="arrow"></span></th>
+              <th data-sort="kategori">Kategori <span class="arrow"></span></th>
+              <th data-sort="pris">Pris <span class="arrow"></span></th>
+              <th data-sort="diffPct">Ändring <span class="arrow"></span></th>
+            </tr>
+          </thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </div>
+
+      <div class="empty-state" id="emptyState" hidden>Inga varor matchar filtret.</div>
+
+      <p class="dash-footnote">
+        <span id="footnoteInfo"></span>
+        <button class="btn btn--ghost btn--sm no-print" id="btnResetHistory" type="button">Nollställ jämförelsehistorik för denna leverantör</button>
+      </p>
+    </div>
+  </section>
+
+</main>
+
+<script src="assets/js/app.js"></script>
+</body>
+</html>
