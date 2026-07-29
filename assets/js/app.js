@@ -31,7 +31,7 @@
     namn: ["namn","produktnamn","produkt","artikel","artikelbeskrivning","beskrivning","benamning","vara","varunamn","varubenamning","name","product","description","text","varutext"],
     artikelnummer: ["artikelnr","artikelnummer","artnr","varunummer","ean","sku","bestnr","bestallningsnummer","id","nr"],
     kategori: ["kategori","grupp","varugrupp","typ","category","sortiment","huvudgrupp"],
-    pris: ["pris","apris","styckpris","nettopris","listpris","prisst","price","inkopspris","kostnad","nettoprisst","brpris","aktpris"],
+    pris: ["pris","apris","styckpris","nettopris","listpris","prisst","price","inkopspris","kostnad","nettoprisst","brpris","aktpris","prisuppgift","utpris","grundpris","rekpris","cirkapris","enhetspris","totalpris","summa","belopp","forsaljningspris"],
     enhet: ["enhet","forp","forpackning","unit","enh","forpackningsstorlek"],
     antal: ["antal","mangd","qty","quantity","kvantitet","st","styck"]
   };
@@ -81,7 +81,7 @@
       var field2 = FIELD_ORDER[i2];
       var words2 = FIELD_SYNONYMS[field2];
       for (var j2=0;j2<words2.length;j2++){
-        if (norm.indexOf(words2[j2]) !== -1) return field2;
+        if (words2[j2].length >= 4 && norm.indexOf(words2[j2]) !== -1) return field2;
       }
     }
     return null;
@@ -338,17 +338,20 @@
 
     reader.onload = function(e){
       try{
-        var wb = isCsv
-          ? XLSX.read(e.target.result, { type: "string" })
-          : XLSX.read(new Uint8Array(e.target.result), { type: "array" });
-        var sheetName = wb.SheetNames[0];
-        var bestSheet = null, bestLen = -1;
-        wb.SheetNames.forEach(function(name){
-          var rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: true, defval: "" });
-          if (rows.length > bestLen){ bestLen = rows.length; bestSheet = name; }
-        });
-        sheetName = bestSheet || sheetName;
-        var rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1, raw: true, defval: "" });
+        var rows;
+        if (isCsv){
+          rows = parseCsv(e.target.result);
+        } else {
+          var wb = XLSX.read(new Uint8Array(e.target.result), { type: "array" });
+          var sheetName = wb.SheetNames[0];
+          var bestSheet = null, bestLen = -1;
+          wb.SheetNames.forEach(function(name){
+            var r = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: true, defval: "" });
+            if (r.length > bestLen){ bestLen = r.length; bestSheet = name; }
+          });
+          sheetName = bestSheet || sheetName;
+          rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1, raw: true, defval: "" });
+        }
         resetDropzone();
         continueWithRows(supplier, rows, "Hittade inga rader i filen.");
       } catch(err){
@@ -358,6 +361,47 @@
     };
     if (isCsv) reader.readAsText(file, "UTF-8");
     else reader.readAsArrayBuffer(file);
+  }
+
+  /* ---------- Egen CSV-parser (undviker SheetJS auto-nummer-gissning som förstör "99,00") ---------- */
+  function detectCsvDelimiter(text){
+    var firstLine = text.split(/\r\n|\n|\r/)[0] || "";
+    var commas = (firstLine.match(/,/g) || []).length;
+    var semis = (firstLine.match(/;/g) || []).length;
+    return semis > commas ? ";" : ",";
+  }
+
+  function parseCsv(text){
+    var delim = detectCsvDelimiter(text);
+    var rows = [];
+    var row = [];
+    var field = "";
+    var inQuotes = false;
+    for (var i = 0; i < text.length; i++){
+      var c = text[i];
+      if (inQuotes){
+        if (c === '"'){
+          if (text[i+1] === '"'){ field += '"'; i++; }
+          else { inQuotes = false; }
+        } else {
+          field += c;
+        }
+      } else if (c === '"'){
+        inQuotes = true;
+      } else if (c === delim){
+        row.push(field); field = "";
+      } else if (c === '\r'){
+        /* ignoreras, \n hanterar radslut */
+      } else if (c === '\n'){
+        row.push(field); rows.push(row); row = []; field = "";
+      } else {
+        field += c;
+      }
+    }
+    if (field.length || row.length){ row.push(field); rows.push(row); }
+    return rows.filter(function(r){
+      return r.some(function(c){ return String(c).trim() !== ""; });
+    });
   }
 
   function continueWithRows(supplier, rows, emptyMessage){
@@ -390,6 +434,14 @@
     }
 
     var guessed = guessMapping(headers);
+    if (guessed.pris === undefined){
+      var priceIdx = guessPriceColumnByContent(dataRows, Object.values(guessed));
+      if (priceIdx !== -1) guessed.pris = priceIdx;
+    }
+    if (guessed.namn === undefined){
+      var nameIdx = guessNameColumnByContent(dataRows, Object.values(guessed));
+      if (nameIdx !== -1) guessed.namn = nameIdx;
+    }
     var hasRequired = REQUIRED_FIELDS.every(function(f){ return guessed[f] !== undefined; });
     if (hasRequired){
       state.mapping = guessed;
@@ -407,6 +459,50 @@
       if (f && mapping[f] === undefined) mapping[f] = idx;
     });
     return mapping;
+  }
+
+  /* ---------- Fallback: gissa kolumn utifrån innehåll när rubriken inte känns igen ---------- */
+  function guessPriceColumnByContent(dataRows, usedIndexes){
+    var numCols = dataRows[0] ? dataRows[0].length : 0;
+    var bestIdx = -1, bestScore = 0;
+    for (var idx = 0; idx < numCols; idx++){
+      if (usedIndexes.indexOf(idx) !== -1) continue;
+      var decimalLike = 0, numericLike = 0;
+      var sample = dataRows.slice(0, Math.min(30, dataRows.length));
+      sample.forEach(function(row){
+        var raw = row[idx];
+        var s = String(raw === undefined || raw === null ? "" : raw).trim();
+        if (!s) return;
+        var p = parsePrice(raw);
+        if (p !== null){
+          numericLike++;
+          if (/[.,]\d{1,2}(\D|$)/.test(s) || /kr\b/i.test(s)) decimalLike++;
+        }
+      });
+      var score = decimalLike * 2 + numericLike;
+      if (numericLike > 0 && score > bestScore){ bestScore = score; bestIdx = idx; }
+    }
+    return bestIdx;
+  }
+
+  function guessNameColumnByContent(dataRows, usedIndexes){
+    var numCols = dataRows[0] ? dataRows[0].length : 0;
+    var bestIdx = -1, bestScore = -1;
+    for (var idx = 0; idx < numCols; idx++){
+      if (usedIndexes.indexOf(idx) !== -1) continue;
+      var sample = dataRows.slice(0, Math.min(30, dataRows.length));
+      var textish = 0;
+      var uniq = {};
+      sample.forEach(function(row){
+        var raw = row[idx];
+        var s = String(raw === undefined || raw === null ? "" : raw).trim();
+        if (!s || s.length <= 2) return;
+        if (isNaN(parseFloat(s.replace(",", ".")))){ textish++; uniq[s] = true; }
+      });
+      var score = textish + Object.keys(uniq).length;
+      if (score > bestScore){ bestScore = score; bestIdx = idx; }
+    }
+    return bestIdx;
   }
 
   /* ---------- PDF: rekonstruera rader/kolumner från textpositioner ---------- */
