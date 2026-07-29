@@ -384,9 +384,27 @@
     if (storedMapping && storedMapping.signature === sig){
       state.mapping = storedMapping.mapping;
       buildItemsAndRender();
+      return;
+    }
+
+    var guessed = guessMapping(headers);
+    var hasRequired = REQUIRED_FIELDS.every(function(f){ return guessed[f] !== undefined; });
+    if (hasRequired){
+      state.mapping = guessed;
+      saveMapping(slug, sig, guessed);
+      buildItemsAndRender();
     } else {
       openMappingScreen(headers, dataRows);
     }
+  }
+
+  function guessMapping(headers){
+    var mapping = {};
+    headers.forEach(function(h, idx){
+      var f = guessField(h);
+      if (f && mapping[f] === undefined) mapping[f] = idx;
+    });
+    return mapping;
   }
 
   /* ---------- PDF: rekonstruera rader/kolumner från textpositioner ---------- */
@@ -745,6 +763,10 @@
     showScreen("upload");
   });
   $("#btnPrint").addEventListener("click", function(){ window.print(); });
+  $("#btnFixColumns").addEventListener("click", function(){
+    if (!state.headers.length) return;
+    openMappingScreen(state.headers, state.rows);
+  });
   $("#btnResetHistory").addEventListener("click", function(){
     if (!state.supplier) return;
     if (confirm("Nollställ jämförelsehistorik för " + state.supplier + "? Nästa uppladdning blir en ny jämförelsebas.")){
