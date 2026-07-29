@@ -132,6 +132,25 @@ button{ font-family: inherit; }
   color: var(--paper-dim);
   flex-wrap: wrap;
 }
+.recent-suppliers{
+  display:flex; align-items:center; gap:8px;
+  font-size:.85rem;
+  color: var(--paper-dim);
+  flex-wrap: wrap;
+}
+.recent-suppliers .recent-label{ font-size:.72rem; text-transform:uppercase; letter-spacing:.06em; }
+.chip{
+  font-family: inherit;
+  font-size: .78rem;
+  font-weight: 600;
+  color: var(--paper);
+  background: transparent;
+  border: 1px solid var(--ink-line);
+  border-radius: 999px;
+  padding: 5px 12px;
+  cursor: pointer;
+}
+.chip:hover{ border-color: var(--brass); color: var(--brass-bright); }
 .supplier-name-btn{
   color: var(--paper);
   font-weight:600;

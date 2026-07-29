@@ -214,6 +214,7 @@
   var screenHistory = $("#screenHistory");
   var supplierSwitch = $("#supplierSwitch");
   var activeSupplierName = $("#activeSupplierName");
+  var recentSuppliersEl = $("#recentSuppliers");
 
   function showScreen(name){
     screenUpload.hidden = name !== "upload";
@@ -221,6 +222,7 @@
     screenDashboard.hidden = name !== "dashboard";
     screenHistory.hidden = name !== "history";
     supplierSwitch.hidden = state.headers.length === 0;
+    renderRecentSuppliers();
   }
 
   /* ---------- Upload screen wiring ---------- */
@@ -927,7 +929,7 @@
     }, 0);
   }
 
-  function openHistoryScreen(){
+  function openHistoryScreen(preferredSupplier){
     var suppliers = getKnownSuppliers();
     if (!suppliers.length){
       historySupplierSelect.innerHTML = "";
@@ -939,10 +941,46 @@
     historySupplierSelect.innerHTML = suppliers.map(function(s){
       return '<option value="' + escapeHtml(s) + '">' + escapeHtml(s) + '</option>';
     }).join("");
-    var chosen = suppliers.indexOf(state.supplier) !== -1 ? state.supplier : suppliers[0];
+    var chosen = preferredSupplier && suppliers.indexOf(preferredSupplier) !== -1
+      ? preferredSupplier
+      : (suppliers.indexOf(state.supplier) !== -1 ? state.supplier : suppliers[0]);
     historySupplierSelect.value = chosen;
     renderHistoryList(chosen);
     showScreen("history");
+  }
+
+  /* ---------- Senaste leverantörer (genväg i headern) ---------- */
+  function getRecentSuppliers(limit){
+    var suppliers = getKnownSuppliers();
+    var withDates = suppliers.map(function(name){
+      var history = loadHistory(slugify(name));
+      return { name: name, last: history.length ? history[history.length - 1].savedAt : null };
+    }).filter(function(s){ return s.last; });
+    withDates.sort(function(a, b){ return new Date(b.last) - new Date(a.last); });
+    return withDates.slice(0, limit).map(function(s){ return s.name; });
+  }
+
+  function renderRecentSuppliers(){
+    if (state.headers.length){
+      recentSuppliersEl.hidden = true;
+      recentSuppliersEl.innerHTML = "";
+      return;
+    }
+    var recent = getRecentSuppliers(3);
+    if (!recent.length){
+      recentSuppliersEl.hidden = true;
+      recentSuppliersEl.innerHTML = "";
+      return;
+    }
+    recentSuppliersEl.hidden = false;
+    recentSuppliersEl.innerHTML = '<span class="recent-label">Senaste</span>' + recent.map(function(name){
+      return '<button class="chip" data-supplier="' + escapeHtml(name) + '" type="button">' + escapeHtml(name) + '</button>';
+    }).join("");
+    $all(".chip", recentSuppliersEl).forEach(function(btn){
+      btn.addEventListener("click", function(){
+        openHistoryScreen(btn.getAttribute("data-supplier"));
+      });
+    });
   }
 
   function renderHistoryList(supplierName){
