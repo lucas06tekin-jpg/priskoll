@@ -111,10 +111,18 @@ button{ font-family: inherit; }
   color: var(--paper-dim);
   flex-wrap: wrap;
 }
-.supplier-switch strong{
+.supplier-name-btn{
   color: var(--paper);
   font-weight:600;
+  font-family: inherit;
+  font-size: inherit;
+  background:none;
+  border:none;
+  padding:0;
+  cursor:pointer;
+  border-bottom: 1px dashed var(--ink-line);
 }
+.supplier-name-btn:hover{ border-bottom-color: var(--brass); color: var(--brass-bright); }
 .supplier-switch .sep{ opacity:.3; }
 
 /* ============================================================

@@ -295,14 +295,16 @@
     return Promise.race([promise, timeout]).finally(function(){ clearTimeout(timer); });
   }
 
+  function deriveSupplierFromFilename(filename){
+    var base = String(filename || "").replace(/\.[^.]+$/, "");
+    base = base.replace(/[_-]+/g, " ").trim();
+    return base || "Ny leverantör";
+  }
+
   function handleFile(file){
     clearUploadError();
-    var supplier = supplierInput.value.trim();
-    if (!supplier){
-      showUploadError("Fyll i vilken leverantör listan kommer från först.");
-      supplierInput.focus();
-      return;
-    }
+    var supplier = supplierInput.value.trim() || deriveSupplierFromFilename(file.name);
+    supplierInput.value = supplier;
     var isCsv = /\.csv$/i.test(file.name);
     var isPdf = /\.pdf$/i.test(file.name);
     var reader = new FileReader();
@@ -774,6 +776,34 @@
       alert("Klart. Historiken för " + state.supplier + " är nollställd.");
     }
   });
+  activeSupplierName.addEventListener("click", function(){
+    var current = state.supplier;
+    var next = prompt("Döp om leverantören till:", current);
+    if (next === null) return;
+    next = next.trim();
+    if (!next || next === current) return;
+    renameSupplier(current, next);
+  });
+
+  function renameSupplier(oldName, newName){
+    var oldSlug = slugify(oldName);
+    var newSlug = slugify(newName);
+    if (oldSlug !== newSlug){
+      var snap = localStorage.getItem(snapshotKey(oldSlug));
+      if (snap){ localStorage.setItem(snapshotKey(newSlug), snap); localStorage.removeItem(snapshotKey(oldSlug)); }
+      var map = localStorage.getItem(mappingKey(oldSlug));
+      if (map){ localStorage.setItem(mappingKey(newSlug), map); localStorage.removeItem(mappingKey(oldSlug)); }
+    }
+    var list = getKnownSuppliers().filter(function(s){ return s !== oldName; });
+    if (list.indexOf(newName) === -1) list.push(newName);
+    localStorage.setItem(suppliersListKey(), JSON.stringify(list));
+
+    state.supplier = newName;
+    activeSupplierName.textContent = newName;
+    supplierInput.value = newName;
+    refreshSupplierDatalist();
+    footnoteInfo.textContent = previousCompareText();
+  }
 
   showScreen("upload");
 })();
